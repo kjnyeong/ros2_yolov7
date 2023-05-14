@@ -1,0 +1,13 @@
+<launch>
+
+    <!-- Parameters (og was F T F F)-->
+    <arg name="use_RGB" default="True" />
+    <arg name="use_depth" default="True" />
+    <arg name="use_YOLOv7" default="True" />
+
+    <!-- YOLOv7 Object detection node -->
+    <node pkg="object_detection" exec="object_detection" name="object_detection" if="$(eval '\'$(var use_YOLOv7)\' == \'True\'')">
+        <param name="use_RGB" value="$(var use_RGB)" />
+    </node>
+
+</launch>
