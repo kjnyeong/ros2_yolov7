@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import ParameterDescriptor
-from geometry_msgs.msg import Point, Twist
+from geometry_msgs.msg import Point
 import cv2
 import torch
 import numpy as np
@@ -14,6 +14,7 @@ from utils.general import check_img_size, non_max_suppression, scale_coords, \
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized,\
     TracedModel
+from std_msgs.msg import String
 
 
 class ObjectDetection(Node):
@@ -33,7 +34,7 @@ class ObjectDetection(Node):
         self.conf_thres = self.get_parameter("conf_thres").get_parameter_value().double_value
         self.iou_thres = self.get_parameter("iou_thres").get_parameter_value().double_value
         self.device = self.get_parameter("device").get_parameter_value().string_value
-        self.img_size = self.get_parameter("img_size").get_parameter_value().integer_value
+        self.img_size = self.get_parameter("img_size").get_parameter_value().integer_value  
         self.use_RGB = self.get_parameter("use_RGB").get_parameter_value().bool_value
         self.use_depth = self.get_parameter("use_depth").get_parameter_value().bool_value
 
@@ -48,21 +49,43 @@ class ObjectDetection(Node):
         self.frequency = 20  # Hz
         self.timer = self.create_timer(1/self.frequency, self.timer_callback)
 
-        # Publishers for Classes
-        self.pub_person = self.create_publisher(Point, "/person", 10)
-        self.person = Point()
-        self.pub_gun = self.create_publisher(Point, "/gun", 10)
-        self.gun = Point()
-        self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+        # # Publishers for Classes
+        # self.pub_person = self.create_publisher(Point, "/person", 10)
+        # self.person = Point()
+        # self.pub_gun = self.create_publisher(Point, "/gun", 10)
+        # self.gun = Point()
+        # self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         
+        self.pub_state = self.create_publisher(String, "/state", 10)
+
+        # Publishers for Classes
+        self.pub_stop = self.create_publisher(Point, "/stop", 10)
+        self.stop = Point()
+        self.pub_go = self.create_publisher(Point, "/go", 10)
+        self.go = Point()
+        self.pub_left_and_go = self.create_publisher(Point, "/left_and_go", 10)
+        self.left_and_go = Point()
+        self.pub_left = self.create_publisher(Point, "/left", 10)
+        self.left = Point()
+        self.pub_yellow = self.create_publisher(Point, "/yellow", 10)
+        self.yellow = Point()
+        self.pub_right = self.create_publisher(Point, "/right", 10)
+        self.right = Point()
+        self.pub_hum_red = self.create_publisher(Point, "/hum_red", 10)
+        self.hum_red = Point()
+        self.pub_hum_green = self.create_publisher(Point, "/hum_green", 10)
+        self.hum_green = Point()
+
+
         # Realsense package
         self.bridge = CvBridge()
 
         # Subscribers
         if self.use_RGB == True:
-            self.rs_sub = self.create_subscription(Image, '/camera', self.camera_callback, 10)
+            self.rs_sub = self.create_subscription(Image, '/front_cam', self.camera_callback, 10)
             #self.range_sub = self.create_subscription(Range, '/point_cloud')
 
+            
         # Initialize YOLOv7
         set_logging()
         self.device = select_device(self.device)
@@ -84,13 +107,22 @@ class ObjectDetection(Node):
 
     def camera_callback(self, data):
         #self.rgb_image = self.bridge.compressed_imgmsg_to_cv2(data)
-        self.rgb_images = data
+        self.rgb_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+        # self.rgb_images = data
+        # self.rgb_image = self.bridge.imgmsg_to_cv2(data, desired_encoding='bgr8')
         self.camera_RGB = True
 
     def YOLOv7_detect(self):
         """ Preform object detection with YOLOv7"""
+        # im0 = np.asanyarray(self.rgb_image)
 
-        im0 = np.asanyarray(self.rgb_image)
+        img = cv2.flip(cv2.flip(np.asanyarray(self.rgb_image),0),1) # Camera is upside down on the Go1
+        im0 = img.copy()
+
+        img = cv2.resize(img, (640, 640))
+        # img = cv2.resize(img, (640))
+        im0 = img.copy()
+
         img = img[np.newaxis, :, :, :]
         img = np.stack(img, 0)
         img = img[..., ::-1].transpose((0, 3, 1, 2))
@@ -150,38 +182,114 @@ class ObjectDetection(Node):
                             # Limit location and distance of object to 480x680 and 5meters away
                             if x < 480 and y < 640:
 
-                                # Choose label for publishing position Relative to camera frame
-                                if label_name == 'person':
-                                    self.person.x = x
-                                    self.person.y = y
-                                    self.person.z = 1.0
-                                    #self.person.z = real_coords[2]*depth_scale # Depth
-                                    self.pub_person.publish(self.person)
-                                    self.twist = Twist()
-                                    self.twist.linear.x = self.person.x
-                                    self.twist.linear.y = self.person.y
-                                    self.twist.linear.z = self.person.z
-                                    self.cmd_vel_publisher(self.twist)
-                                if label_name == 'gun':
-                                    self.gun.x = x
-                                    self.gun.y = y
-                                    self.gun.z = 1.0
-                                    #self.gun.z = real_coords[2]*depth_scale # Depth
-                                    self.pub_gun.publish(self.gun)
-                                    self.twist = Twist()
-                                    self.twist.linear.x = self.gun.x
-                                    self.twist.linear.y = self.gun.y
-                                    self.twist.linear.z = self.gun.z
-                                    self.cmd_vel_publisher(self.twist)
-                                    #self.get_logger().info(f"depth_coord = {real_coords[0]*depth_scale}  {real_coords[1]*depth_scale}  {real_coords[2]*depth_scale}")
-                                    self.get_logger().info(f"depth_coord = {self.twist.linear.x}  {self.twist.linear.y}  {self.twist.linear.z}")
-            '''
+                                # # Choose label for publishing position Relative to camera frame
+                                # if label_name == 'person':
+                                #     self.person.x = x
+                                #     self.person.y = y
+                                #     self.person.z = 1.0
+                                #     #self.person.z = real_coords[2]*depth_scale # Depth
+                                #     self.pub_person.publish(self.person)
+                                #     self.twist = Twist()
+                                #     self.twist.linear.x = self.person.x
+                                #     self.twist.linear.y = self.person.y
+                                #     self.twist.linear.z = self.person.z
+                                #     self.cmd_vel_publisher(self.twist)
+                                # if label_name == 'gun':
+                                #     self.gun.x = x
+                                #     self.gun.y = y
+                                #     self.gun.z = 1.0
+                                #     #self.gun.z = real_coords[2]*depth_scale # Depth
+                                #     self.pub_gun.publish(self.gun)
+                                #     self.twist = Twist()
+                                #     self.twist.linear.x = self.gun.x
+                                #     self.twist.linear.y = self.gun.y
+                                #     self.twist.linear.z = self.gun.z
+                                #     self.cmd_vel_publisher(self.twist)
+                                #     #self.get_logger().info(f"depth_coord = {real_coords[0]*depth_scale}  {real_coords[1]*depth_scale}  {real_coords[2]*depth_scale}")
+                                #     self.get_logger().info(f"depth_coord = {self.twist.linear.x}  {self.twist.linear.y}  {self.twist.linear.z}")
+                                if label_name == 'stop':
+                                    self.stop.x = x
+                                    self.stop.y = y
+                                    self.stop.z = 1.0
+                                    self.pub_stop.publish(self.stop)
+                                if label_name == 'go':
+                                    self.go.x = x
+                                    self.go.y = y
+                                    self.go.z = 1.0
+                                    self.pub_go.publish(self.go)
+                                if label_name == 'left_and_go':
+                                    self.left_and_go.x = x
+                                    self.left_and_go.y = y
+                                    self.left_and_go.z = 1.0
+                                    self.pub_left_and_go.publish(self.left_and_go)
+                                if label_name == 'left':
+                                    self.left.x = x
+                                    self.left.y = y
+                                    self.left.z = 1.0
+                                    self.pub_left.publish(self.left)
+                                if label_name == 'yellow':
+                                    self.yellow.x = x
+                                    self.yellow.y = y
+                                    self.yellow.z = 1.0
+                                    self.pub_yellow.publish(self.yellow)
+                                if label_name == 'right':
+                                    self.right.x = x
+                                    self.right.y = y
+                                    self.right.z = 1.0
+                                    self.pub_right.publish(self.right)
+                                if label_name == 'hum_red':
+                                    self.hum_red.x = x
+                                    self.hum_red.y = y
+                                    self.hum_red.z = 1.0
+                                    self.pub_hum_red.publish(self.hum_red)
+                                if label_name == 'hum_green':
+                                    self.hum_green.x = x
+                                    self.hum_green.y = y
+                                    self.hum_green.z = 1.0
+                                    self.pub_hum_green.publish(self.hum_green)
+
+                                # self.get_logger().info(f"depth_coord = {real_coords[0]*depth_scale}  {real_coords[1]*depth_scale}  {real_coords[2]*depth_scale}")
+            
+            # 가장 확률 높은 클래스 토픽
+            # max_confidence = 0
+            # max_label = None
+
+            # for *xyxy, conf, cls in reversed(det):
+            #     if conf > max_confidence:
+            #         max_confidence = conf
+            #         max_label = self.names[int(cls)]
+
+            # # If we found a label with high confidence, publish it
+            # if max_label:
+            #     state_msg = String()
+            #     state_msg.data = max_label
+            #     self.pub_state.publish(state_msg)
+
+            
+            max_confidence = 0
+            max_label = None
+            max_coords = None
+
+            for *xyxy, conf, cls in reversed(det):
+                if conf > max_confidence:
+                    max_confidence = conf
+                    max_label = self.names[int(cls)]
+                    max_coords = xyxy
+
+            # If we found a label with high confidence, publish it
+            if max_label and max_coords:
+                state_msg = String()
+                # 라벨명과 바운딩 박스 좌표를 함께 문자열로 만들어 전송
+                state_msg.data = f"{max_label} - {max_coords[0]}, {max_coords[1]}, {max_coords[2]}, {max_coords[3]}"
+                self.pub_state.publish(state_msg)
+                
+
             cv2.imshow("YOLOv7 Object detection result RGB", cv2.resize(im0, None, fx=1.5, fy=1.5))
             if self.use_depth == True:
                 cv2.imshow("YOLOv7 Object detection result Depth", cv2.resize(self.depth_color_map, None, fx=1.5, fy=1.5))
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-            '''
+            
 
     def timer_callback(self):
         if self.camera_RGB == True:
