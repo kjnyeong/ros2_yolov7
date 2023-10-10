@@ -8,21 +8,21 @@ torch 1.10.1
 torchvision 0.11.2
 torchaudio 0.10.1
 
-# best.pt
+-best.pt
 640 x 640 --> input 이미지는 반드시 학습 모델 이미지 사이즈와 동일해야 한다.
 
 
 
 
-# 이미지 빌드 (현재 폴더 내에 있는 ros2_yolov7 폴더를 컨터이너 내부의 /home/docker_ws로 복사하여 이미지 빌드)
+- 이미지 빌드 (현재 폴더 내에 있는 ros2_yolov7 폴더를 컨터이너 내부의 /home/docker_ws로 복사하여 이미지 빌드)
 docker build -t chulwoo1011/yolov7:v7 .
 
 
-# 이미지 빌드 후 다음 명령어를 이용해 컨테이너 빌드 ( 컨테이너 명 : yolov7 )
-# /home/shared_ws 를 컨테이너 내부 폴더에 공유폴더를 지정하였으므로 공유폴더 사용 시 -v ~~/~~/~:/home/shared_ws 명령어 추가
-# amd 버전
+- 이미지 빌드 후 다음 명령어를 이용해 컨테이너 빌드 ( 컨테이너 명 : yolov7 )
+- /home/shared_ws 를 컨테이너 내부 폴더에 공유폴더를 지정하였으므로 공유폴더 사용 시 -v ~~/~~/~:/home/shared_ws 명령어 추가
+- amd 버전
 docker run -d -it --runtime --name yolov7 --ipc=host chulwoo1011/yolov7:v7
-# arm 버전
+- arm 버전
 docker run -d -it --runtime --name yolov7 --ipc=host chulwoo1011/yolov7:v7
 
 
@@ -33,6 +33,6 @@ docker run -d -it --runtime --name yolov7 --ipc=host chulwoo1011/yolov7:v7
 3. . install/setup.bash 입력한다.
 4. ros2 launch object_detection object_detection.xml 을 입력하면 실행된다.
 
-# 토픽 확인
+- 토픽 확인
 현재 신호 상태
 /state
